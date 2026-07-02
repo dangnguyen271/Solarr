@@ -1,0 +1,1 @@
+The narrative is that Vietnam is on "chuyển đổi số" and also planning to build a lot of sandbox like Thu Thiem for IFC. The energy need will be skyrocket and current system might not be able to fulfill it. Vietnam's nuclear infrastructure is also not yet to catch up. We want to make solar energy able to integrate and become a primary energy sources
