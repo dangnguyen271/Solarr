@@ -63,6 +63,10 @@ firmgrid/
 │   ├── app.py            # bright, stakeholder-tab demo: Operator / Households /
 │   │                     #   Stations / Data centres / City & judges
 │   └── selftest.py       # invariants + smoke test (run before every demo!)
+├── webapp/               # FRONT-OF-HOUSE demo — 4 role dashboards (static, no build)
+│   ├── index.html        #   open by double-click, or python3 -m http.server 8600
+│   ├── styles.css · ui.js · mock-data.js · app.js
+│   └── README.md         #   routes: #/household #/buyer #/operator #/station
 ├── tools/
 │   ├── proposal_content.py  # single source of truth for proposal text — edit HERE
 │   ├── build_proposal.py    # → submission DOCX + PDF (Chrome renders the PDF)
@@ -71,6 +75,11 @@ firmgrid/
 ├── APP_EXPLAINER.md      # what every feature means, in plain language
 └── WINNING_PLAYBOOK.md   # this file
 ```
+
+**Two complementary demos — pick per audience:**
+- **`webapp/` (role dashboards)** — bright, polished, one screen per stakeholder (Household seller / Buyer / Operator / Station console). Best for *showing the experience* to non-technical judges: submit an ask and watch it clear, buy an offer, run "Clear market," watch the station route energy live. Zero setup — double-click `index.html`.
+- **`prototype/` (Streamlit engine)** — real Hanoi weather, forecasting, MILP auction, settlement, impact arithmetic. Best for *proving the machinery* and answering "is the AI real?" Run `./run.sh`.
+Lead the pitch with the webapp (relatable), keep the Streamlit engine ready for the "how does it actually work?" question.
 
 - Environment: `firmgrid/.venv` (Python 3.14). Recreate: `python3 -m venv .venv && .venv/bin/pip install -r prototype/requirements.txt python-pptx python-docx`.
 - Verify before demoing: `cd prototype && ../.venv/bin/python selftest.py` → must end `ALL CHECKS PASSED`.

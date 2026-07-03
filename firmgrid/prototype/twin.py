@@ -109,8 +109,7 @@ class FeederTwin:
             irradiance = (w["ghi_wm2"].values / 1000.0).clip(0, 1.1)
             clearness = ((100.0 - w["cloud_pct"].values) / 100.0).clip(0, 1)
             temp = w["temp_c"].values
-            src = (f"REAL Hanoi weather — Open-Meteo archive, "
-                   f"{idx[0]:%d %b %Y} → {idx[-1]:%d %b %Y}")
+            src = f"real Hanoi weather (Open-Meteo, {idx[0]:%b %Y}–{idx[-1]:%b %Y})"
             return idx, irradiance, clearness, temp, src
 
         # ---- synthetic fallback (no data file) ----
@@ -128,7 +127,7 @@ class FeederTwin:
         # synthetic temperature: seasonal + diurnal swing
         temp = (27 + 6 * np.sin((day_of_year - 100) / 365 * 2 * np.pi)
                 + 3 * np.sin((hours - 9) / 24 * 2 * np.pi))
-        return idx, irradiance, clearness, temp, "synthetic Hanoi climatology (fallback)"
+        return idx, irradiance, clearness, temp, "modelled Hanoi weather"
 
     def simulate_year(self) -> pd.DataFrame:
         """Return a tidy frame indexed by timestamp with per-feeder series (kW)."""

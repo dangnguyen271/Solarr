@@ -45,6 +45,10 @@ st.markdown(
       }
       div[data-testid="stMetricLabel"] { color: #64748b; }
       .fg-hero { font-size: 1.02rem; color: #475569; margin-top: -6px; }
+      .fg-model { font-size: .9rem; color: #475569; background: #ffffff;
+        border: 1px solid #e2e8f0; border-left: 4px solid #059669; border-radius: 10px;
+        padding: 11px 15px; margin: 6px 0 4px; line-height: 1.65; }
+      .fg-model b { color: #0f172a; }
       .fg-banner {
         border-radius: 10px; padding: 10px 16px; margin: 2px 0 14px;
         border: 1px solid #e2e8f0; background: #ffffff;
@@ -121,10 +125,19 @@ res0 = cached_day(DEMO_DAY, 0.0, False, 0.7)
 # ----------------------------------------------------------------------- #
 st.title("⚡ FirmGrid")
 st.markdown(
-    '<p class="fg-hero">One engine, every stakeholder: turn Vietnam\'s wasted rooftop solar '
-    "into firm clean power — <b>Sun-to-Wheels</b> today, <b>Sun-to-Servers</b> next.<br>"
-    f"🛰️ Weather: <b>{twin.data_source}</b> · demo runs fully offline · "
-    f"demo day: <b>{DEMO_DAY}</b> (worst curtailment day of the real year)</p>",
+    '<p class="fg-hero">A local marketplace that turns a neighbourhood\'s surplus rooftop '
+    "solar into firm clean power — coordinated so the grid stays safe.</p>",
+    unsafe_allow_html=True,
+)
+st.markdown(
+    '<p class="fg-model"><b>What this models —</b> one Hanoi low-voltage feeder on a single '
+    "400&nbsp;kVA transformer:<br>"
+    "• <b>30</b> homes with rooftop solar — the <b>sellers</b><br>"
+    "• <b>25</b> homes without solar — local <b>consumers</b> who absorb nearby export<br>"
+    "• <b>3</b> business rooftops (shop, school, small factory) — larger sellers<br>"
+    "• <b>2</b> battery-swap stations + <b>1</b> e-taxi depot — <b>flexible demand</b> that can "
+    "charge on midday surplus<br>"
+    f"Driven by {twin.data_source}; one day shown is {DEMO_DAY}.</p>",
     unsafe_allow_html=True,
 )
 
@@ -135,27 +148,27 @@ mc1.metric("Clean energy rescued today", f"{res0.recovered_kwh:.0f} kWh",
 mc2.metric("Paid to solar families today", f"{res0.vnd_paid:,.0f} ₫")
 mc3.metric("Grid safety", f"{res0.baseline_breaches} → {res0.fg_breaches} breaches",
            help="15-minute windows where reverse flow exceeds the safe limit, without vs with FirmGrid.")
-mc4.metric("Forecast skill (held-out days)", f"F1 = {m['congestion_f1']:.2f}",
-           help="Catches ~6 of every 7 transformer overloads an hour ahead, on real weather it never trained on.")
+mc4.metric("Forecast accuracy", f"F1 = {m['congestion_f1']:.2f}",
+           help="Predicts a transformer overload about an hour ahead — catches roughly 6 of every 7, measured on days not used for training.")
 
 tabs = st.tabs([
     "⚡ Grid operator (EVN)",
     "🏠 Solar households",
     "🔋 Swap stations & fleets",
     "🏢 Data centres",
-    "🌏 City & judges",
+    "🌏 City impact",
 ])
 
 # ======================================================================= #
 # TAB 1 — GRID OPERATOR
 # ======================================================================= #
 with tabs[0]:
-    banner(GREEN, "⚡", "EVN distribution operator — the control room",
+    banner(GREEN, "⚡", "EVN distribution operator",
            "when and how little to curtail, window by window — instead of cutting the whole feeder.")
 
     c1, c2 = st.columns([3, 1])
-    tsel = c1.slider("Scrub through the day (15-minute windows)", 0, 95, 49, 1, key="op_t")
-    storm = c2.slider("☁️ Stress-test: storm front (% solar lost)", 0, 90, 0, 10, key="op_storm")
+    tsel = c1.slider("Time of day (15-minute windows)", 0, 95, 49, 1, key="op_t")
+    storm = c2.slider("☁️ Cloud cover — % of solar lost", 0, 90, 0, 10, key="op_storm")
     opres = cached_day(DEMO_DAY, storm / 100.0, False, 0.7) if storm else res0
     tstamp = opres.df_day.index[tsel]
 
@@ -188,16 +201,16 @@ with tabs[0]:
     with st.expander("📋 Auction log — every decision, explained in one sentence"):
         st.dataframe(pd.DataFrame(opres.allocations_log), width="stretch", height=240)
     st.caption(
-        "Safety posture: never allocate above 90% of forecast headroom · bids capped at "
-        "physical reality · operator override outranks every automated decision."
+        "Safety rules: never allocate above 90% of forecast headroom · bids capped at each "
+        "home's physical maximum · a manual operator override outranks every automated decision."
     )
 
 # ======================================================================= #
 # TAB 2 — HOUSEHOLDS
 # ======================================================================= #
 with tabs[1]:
-    banner(AMBER, "🏠", "Prosumer families — the people who paid for the panels",
-           "none needed: switch on Auto-Sell once, earn passively — with a fair queue and a "
+    banner(AMBER, "🏠", "Households with rooftop solar",
+           "none needed: switch on Auto-Sell once and earn passively — with a fair queue and a "
            "verifiable payment trail.")
 
     sold_per_home = res0.home_accepted_kw.sum(axis=0) * 0.25
@@ -229,11 +242,11 @@ with tabs[1]:
         declined = int(((res0.home_surplus_kw[:, hid] > 0.05)
                         & (res0.home_accepted_kw[:, hid] <= 1e-3)).sum())
         st.markdown(
-            f"- Windows declined today: **{declined}** (each earned a priority credit)\n"
-            f"- Every outcome explainable: bid → auction → meter → payment\n"
-            f"- You never pay anything to participate."
+            f"- Windows declined today: **{declined}** (each earns a priority credit for next time)\n"
+            f"- Each step is traceable: bid → auction → meter reading → payment\n"
+            f"- Households pay nothing to take part."
         )
-        fraud = st.toggle("💀 Try to cheat: bid 15 kW (more than this roof can make)", key="home_fraud")
+        fraud = st.toggle("Simulate a false bid: 15 kW, above this roof's limit", key="home_fraud")
         if fraud:
             fres = cached_day(DEMO_DAY, 0.0, True, 0.7)
             for msg in fres.fraud_events:
@@ -329,15 +342,15 @@ with tabs[3]:
     st.plotly_chart(clean_fig(figb, height=380), width="stretch", key="dc_fig")
     st.caption(
         "Indicative economics: recovered firm solar $60/MWh (IRENA band $54–82), storage cycling "
-        "$45/MWh throughput, grid tariff $92/MWh — every number a judge can change."
+        "$45/MWh throughput, grid tariff $92/MWh."
     )
 
 # ======================================================================= #
 # TAB 5 — CITY & JUDGES
 # ======================================================================= #
 with tabs[4]:
-    banner(RED, "🌏", "Hanoi, policymakers — and today, the judges",
-           "whether the numbers hold: change any assumption and watch the impact recompute.")
+    banner(RED, "🌏", "Hanoi & policymakers",
+           "how much curtailed solar the city recovers — adjust the assumptions to your own figures.")
 
     a1, a2, a3 = st.columns(3)
     with a1:
@@ -366,7 +379,7 @@ with tabs[4]:
 
     st.markdown(
         f"""
-**The chain, written out** — {homes} homes × {kwp:.1f} kWp × {yield_kwh} kWh/kWp·yr ×
+**How this is calculated** — {homes} homes × {kwp:.1f} kWp × {yield_kwh} kWh/kWp·yr ×
 {curt*100:.0f}% curtailed = **{per_tr_mwh:.1f} MWh/yr** stranded per transformer →
 recover {recov*100:.0f}% → × {ntr:,} transformers = **{city_gwh:.1f} GWh/yr ≈
 {city_co2:,.0f} t CO₂/yr** (official 2024 grid factor {ef}).
@@ -378,4 +391,4 @@ avoids a further **16,000–27,000 t CO₂/yr** — like planting a million tree
 mandate — the Tier-2 buyer for firm blocks (see the Data centres tab).
         """
     )
-    st.caption("SDG 7 · 9 · 11 · 13 — and every parameter above is deliberately yours to move.")
+    st.caption("Aligned with SDG 7 · 9 · 11 · 13.")

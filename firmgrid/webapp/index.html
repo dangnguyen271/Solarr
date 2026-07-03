@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FirmGrid — grid-aware clean-energy marketplace</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="appbar">
+    <a class="brand" href="#/">
+      <span class="bolt">⚡</span>
+      <span>FirmGrid<small>grid-aware energy market</small></span>
+    </a>
+    <nav class="rolenav">
+      <a href="#/household" data-role="household">🏠 Household</a>
+      <a href="#/buyer" data-role="buyer">🛒 Buyer</a>
+      <a href="#/operator" data-role="operator">🛰️ Operator</a>
+      <a href="#/station" data-role="station">⚡ Station</a>
+    </nav>
+    <div class="simctrl">
+      <span class="livedot" id="livedot"></span>
+      <span>Hanoi · <span class="clock" id="clock">11:30</span></span>
+      <button class="simbtn" id="playbtn" onclick="App.togglePlay()">⏸ Pause</button>
+    </div>
+  </header>
+
+  <main id="app"><!-- rendered by app.js --></main>
+
+  <script src="ui.js"></script>
+  <script src="mock-data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
