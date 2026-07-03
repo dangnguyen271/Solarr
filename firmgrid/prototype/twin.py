@@ -92,33 +92,51 @@ class FeederTwin:
     # ------------------------------------------------------------------ #
     # Weather / irradiance
     # ------------------------------------------------------------------ #
-    def _daily_clearness(self) -> np.ndarray:
+    def _daily_clearness(self, days: int, start: str) -> np.ndarray:
         """One clearness index per day: monthly mean + AR(1) weather noise."""
-        month_of_day = pd.date_range("2026-01-01", periods=DAYS, freq="D").month - 1
+        month_of_day = pd.date_range(start, periods=days, freq="D").month - 1
         base = MONTHLY_CLEARNESS[month_of_day]
-        noise = np.zeros(DAYS)
-        for d in range(1, DAYS):
+        noise = np.zeros(days)
+        for d in range(1, days):
             noise[d] = 0.6 * noise[d - 1] + self.rng.normal(0, 0.10)
         return np.clip(base + noise, 0.05, 0.95)
 
-    def simulate_year(self) -> pd.DataFrame:
-        """Return a tidy frame indexed by timestamp with per-feeder series (kW)."""
+    def _weather(self):
+        """Return (idx, irradiance 0..1, clearness 0..1, temp_c, source_label)."""
+        if WEATHER_CSV.exists():
+            w = pd.read_csv(WEATHER_CSV, index_col="time", parse_dates=True)
+            idx = w.index
+            irradiance = (w["ghi_wm2"].values / 1000.0).clip(0, 1.1)
+            clearness = ((100.0 - w["cloud_pct"].values) / 100.0).clip(0, 1)
+            temp = w["temp_c"].values
+            src = (f"REAL Hanoi weather — Open-Meteo archive, "
+                   f"{idx[0]:%d %b %Y} → {idx[-1]:%d %b %Y}")
+            return idx, irradiance, clearness, temp, src
+
+        # ---- synthetic fallback (no data file) ----
         idx = pd.date_range("2026-01-01", periods=DAYS * STEPS_PER_DAY, freq="15min")
         hours = (idx.hour + idx.minute / 60.0).values
         month = idx.month.values - 1
-        dow = idx.dayofweek.values
         day_of_year = idx.dayofyear.values - 1
-
-        clearness_d = self._daily_clearness()
-        clearness = clearness_d[day_of_year]
-
-        # --- irradiance shape: half-sine over daylight, per-step cloud flicker
+        clearness = self._daily_clearness(DAYS, "2026-01-01")[day_of_year]
         daylen = MONTHLY_DAYLENGTH_H[month]
         sunrise = 12.0 - daylen / 2.0
         solar_pos = np.clip((hours - sunrise) / daylen, 0.0, 1.0)
         shape = np.sin(np.pi * solar_pos) ** 1.3
         flicker = np.clip(self.rng.normal(1.0, 0.08, len(idx)), 0.6, 1.15)
-        irradiance = shape * clearness * flicker          # 0..1 plane-of-array proxy
+        irradiance = shape * clearness * flicker
+        # synthetic temperature: seasonal + diurnal swing
+        temp = (27 + 6 * np.sin((day_of_year - 100) / 365 * 2 * np.pi)
+                + 3 * np.sin((hours - 9) / 24 * 2 * np.pi))
+        return idx, irradiance, clearness, temp, "synthetic Hanoi climatology (fallback)"
+
+    def simulate_year(self) -> pd.DataFrame:
+        """Return a tidy frame indexed by timestamp with per-feeder series (kW)."""
+        idx, irradiance, clearness, temp, self.data_source = self._weather()
+        hours = (idx.hour + idx.minute / 60.0).values
+        month = idx.month.values - 1
+        dow = idx.dayofweek.values
+        n_days = len(idx) // STEPS_PER_DAY
 
         # --- PV generation per home (kW): kWp * irradiance * performance ratio
         pv_kwp = np.array([h.kwp for h in self.households])
@@ -129,8 +147,8 @@ class FeederTwin:
         morning = 0.7 * np.exp(-0.5 * ((hours - 6.5) / 1.2) ** 2)
         evening = 1.8 * np.exp(-0.5 * ((hours - 19.5) / 1.8) ** 2)
         midday_weekend = np.where(dow >= 5, 0.5 * np.exp(-0.5 * ((hours - 12.0) / 2.5) ** 2), 0.0)
-        # summer AC load scales with month
-        ac = np.isin(month, [4, 5, 6, 7]) * 0.35
+        # air-conditioning load follows the (real) temperature above 25 °C
+        ac = np.clip((temp - 25.0) / 8.0, 0.0, 1.0) * 0.45
         profile = 0.35 + morning + evening + midday_weekend + ac
         noise_h = np.clip(self.rng.normal(1.0, 0.15, (len(idx), len(base))), 0.4, 1.8)
         load = profile[:, None] * base[None, :] * 2.2 * noise_h   # (T, H)
@@ -148,7 +166,7 @@ class FeederTwin:
                 + 0.25 * np.exp(-0.5 * ((hours - 7.5) / 1.1) ** 2)
                 + 0.05
             )
-            per_day_sum = w.reshape(DAYS, STEPS_PER_DAY).sum(axis=1)
+            per_day_sum = w.reshape(n_days, STEPS_PER_DAY).sum(axis=1)
             w_norm = w / np.repeat(per_day_sum, STEPS_PER_DAY)   # sums to 1 each day
             prof_kw = w_norm * s.daily_energy_kwh / 0.25          # kWh -> kW per 15-min step
             station_baseline += np.minimum(prof_kw, s.max_power_kw)
@@ -157,6 +175,7 @@ class FeederTwin:
             {
                 "irradiance": irradiance,
                 "clearness": clearness,
+                "temp_c": temp,
                 "pv_total_kw": pv_total.sum(axis=1),
                 "load_total_kw": load.sum(axis=1),
                 # consumption still drawn from the grid after PV self-use —

@@ -44,6 +44,12 @@ class DayResult:
     allocations_log: list
     ledger: TrustLedger
     fraud_events: list
+    # per-home, per-window detail for the neighbourhood map (steps, H)
+    home_surplus_kw: np.ndarray = None
+    home_accepted_kw: np.ndarray = None
+    baseline_curtailed: np.ndarray = None   # bool (steps,): feeder-wide cut active
+    exported_fg_kw: np.ndarray = None       # (steps,)
+    exported_base_kw: np.ndarray = None     # (steps,)
 
 
 def run_day(
@@ -109,6 +115,7 @@ def run_day(
     allocations_log: list[dict] = []
 
     exported_fg = np.zeros(steps)
+    home_accepted = np.zeros((steps, twin.n_households))
     vnd_paid = 0.0
 
     for t in range(steps):
@@ -134,6 +141,7 @@ def run_day(
         window_kw = 0.0
         for a in allocs:
             window_kw += a.accepted_kw
+            home_accepted[t, a.hid] = a.accepted_kw
             if a.accepted_kw > 0:
                 kwh = a.accepted_kw * 0.25
                 vnd_paid += kwh * BASE_PRICE_VND
@@ -189,4 +197,9 @@ def run_day(
         allocations_log=allocations_log,
         ledger=ledger,
         fraud_events=fraud_events,
+        home_surplus_kw=home_surplus,
+        home_accepted_kw=home_accepted,
+        baseline_curtailed=breach_base,
+        exported_fg_kw=exported_fg,
+        exported_base_kw=exported_base,
     )

@@ -94,19 +94,22 @@ SECTIONS = [
     ("4. PROPOSED SOLUTION AND CORE FEATURES", [
         ("p", "FirmGrid replaces blunt curtailment with a predicted, market-cleared, minimal "
               "allocation — and gives the surplus somewhere useful to go. Five features, all "
-              "demonstrated live in the working prototype (a physics-grounded digital twin of a "
-              "real-topology 400 kVA Hanoi feeder: 30 PV homes, 25 non-PV homes, 3 C&I rooftops, "
-              "2 swap stations, 1 e-taxi depot, one simulated year at 15-minute resolution):"),
+              "demonstrated live in the working prototype: a digital twin of a real-topology "
+              "400 kVA Hanoi feeder (30 PV homes, 25 non-PV homes, 3 C&I rooftops, 2 swap "
+              "stations, 1 e-taxi depot) driven by 12 months of REAL Hanoi weather "
+              "(Open-Meteo archive, Jul 2025 – Jun 2026) at 15-minute resolution, with an "
+              "animated neighbourhood map showing every participant's market status live:"),
         ("bullets", [
             "F1 — GridMind Forecast: transformer breach probability and household surplus "
-            "nowcast (gradient boosting; F1 = 0.80 on held-out days, feeder surplus "
-            "MAE ≈ 2.4 kW in the twin — metrics shown on screen, honestly).",
+            "nowcast (gradient boosting; F1 = 0.86 on held-out days, feeder surplus "
+            "MAE ≈ 2.0 kW on real weather — metrics shown on screen, honestly).",
             "F2 — HeadRoom Auction: a MILP clears every 15-minute window; accepted export never "
             "exceeds 90% of forecast headroom; rejection credits guarantee bounded maximum wait "
             "(measured max on the demo day: 1 window); every outcome explained in one sentence.",
             "F3 — Sun-to-Wheels FlexMatch: swap stations and depots are paid to pull charging "
-            "into the 10:00–14:00 window — on the demo day this shifts ~300 kWh into the sun and "
-            "recovers 95% of otherwise-curtailed energy (811 → 39 kWh wasted; zero limit breaches).",
+            "into the 10:00–14:00 window — on the demo day (a real May 2026 sunny day) this "
+            "shifts ~300 kWh into the sun and recovers 97% of otherwise-curtailed energy "
+            "(703 → 20 kWh wasted; 17 → 0 limit breaches).",
             "F4 — One-Switch Prosumer App (roadmap: Zalo Mini App): default Auto-Sell, VND-first "
             "(“Hôm nay bạn kiếm được 12.400đ”), full bid→meter→payment transparency.",
             "F5 — TrustLedger + Sentinel: SHA-256 hash-chained audit of every event; bids are "
@@ -115,7 +118,7 @@ SECTIONS = [
         ]),
         ("p", "Tier 2 — Firm Block Studio: the same engine aggregates ~800 orchestrated "
               "transformers + 160 MWh storage into a 24/7 hour-matched block for a 20 MW data "
-              "centre: 54% hourly CFE at a blended ~$84/MWh versus a ~$92/MWh grid tariff — the "
+              "centre: 54% hourly CFE at a blended ~$85/MWh versus a ~$92/MWh grid tariff — the "
               "negotiation numbers of Vietnam's first firm-solar DPPA, computed live."),
     ]),
     # ------------------------------------------------------------------ #
@@ -188,8 +191,10 @@ SECTIONS = [
               "0.9·h(t), fairness bounds) → dispatch set-points → meter reconciliation → Sentinel "
               "anomaly screen → VND settlement → Merkle root sealed. Human operator override "
               "outranks every automated decision."),
-        ("p", "C. Data & infrastructure — Prototype: seeded synthetic twin calibrated to Hanoi "
-              "climatology (Open-Meteo/PVGIS ranges) and Vietnamese load-research shapes; every "
+        ("p", "C. Data & infrastructure — Prototype: irradiance, temperature and cloud cover "
+              "are REAL Hanoi data (Open-Meteo historical archive, hourly, Jul 2025 – Jun 2026, "
+              "cached locally so the demo runs offline); household loads follow Vietnamese "
+              "load-research shapes with air-conditioning driven by the real temperature; every "
               "assumption adjustable by judges. Pilot: EVN smart meters where deployed, "
               "inverter-cloud APIs elsewhere; partner station logs under MoU; personal data "
               "minimised, processed in-country. Infrastructure: demo = one laptop; cloud "
@@ -199,7 +204,14 @@ SECTIONS = [
     ("8. REFERENCES", [
         ("bullets", [
             "Decree 58/2025/NĐ-CP (renewable energy development; rooftop surplus sale), as "
-            "amended June 2026 (surplus-sale cap 20% → 50%); EVN Decision 429/QĐ-EVN (2025).",
+            "amended by Decree 243/2026/NĐ-CP effective 26 June 2026 (surplus-sale cap "
+            "20% → 50%); EVN Decision 429/QĐ-EVN (2025). Amendment independently confirmed "
+            "by: LNT Partners, “DPPA and Power Self-Production & Consumption Amendments — "
+            "What's Changed” (2026); Việt Nam News, “Government raises rooftop solar excess "
+            "electricity sales cap to 50 per cent”; Argus Media, “Vietnam raises grid export "
+            "cap of rooftop solar to 50pc”; Nation Thailand, “Vietnam raises rooftop solar "
+            "grid sales ceiling to 50 per cent”; pv magazine, “Vietnam proposes increase to "
+            "surplus power sale from rooftop solar” (Jan 2026, draft stage).",
             "Decree 57/2025/NĐ-CP on the DPPA mechanism (EV charging providers as large "
             "consumers); Decree 52/2024/NĐ-CP on non-cash payment.",
             "Decision 768/QĐ-TTg (April 2025), revised PDP8: solar 46–73 GW and 10–16 GW "

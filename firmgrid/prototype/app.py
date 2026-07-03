@@ -1,7 +1,8 @@
-"""FirmGrid — live prototype dashboard.
+"""FirmGrid — live prototype dashboard (stakeholder view, bright theme).
 
 Run:  streamlit run app.py
 Fully offline; every number is computed live from the digital twin.
+One tab per stakeholder: who they are, what decision FirmGrid enables.
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ import streamlit as st
 
 from firmblock import build_firm_block
 from gridmind import GridMind
+from mapview import day_sankey, feeder_map, tx_gauge, unmanaged_reverse
 from market import run_day
 from twin import REVERSE_LIMIT_KW, FeederTwin, pick_demo_day
 
@@ -25,41 +27,63 @@ st.set_page_config(
     layout="wide",
 )
 
-GREEN = "#34d399"
-BLUE = "#38bdf8"
-AMBER = "#fbbf24"
-RED = "#f87171"
-INK = "#e2e8f0"
-GRID = "rgba(148,163,184,0.15)"
+GREEN = "#059669"
+BLUE = "#0284c7"
+AMBER = "#d97706"
+RED = "#dc2626"
+INK = "#0f172a"
+MUTED = "#64748b"
+GRIDLINE = "rgba(15,23,42,0.07)"
 
 st.markdown(
     """
     <style>
-      .stApp { background: #0b1220; }
-      h1, h2, h3, h4, p, li, span, div { color: #e2e8f0; }
       div[data-testid="stMetric"] {
-        background: #101a30; border: 1px solid rgba(56,189,248,0.25);
-        border-radius: 12px; padding: 12px 16px;
+        background: #ffffff; border: 1px solid #e2e8f0; border-top: 3px solid #059669;
+        border-radius: 10px; padding: 12px 16px;
+        box-shadow: 0 1px 3px rgba(15,23,42,0.06);
       }
-      div[data-testid="stMetricLabel"] { color: #94a3b8; }
-      .fg-hero { font-size: 1.05rem; color: #94a3b8; margin-top: -8px; }
+      div[data-testid="stMetricLabel"] { color: #64748b; }
+      .fg-hero { font-size: 1.02rem; color: #475569; margin-top: -6px; }
+      .fg-banner {
+        border-radius: 10px; padding: 10px 16px; margin: 2px 0 14px;
+        border: 1px solid #e2e8f0; background: #ffffff;
+        box-shadow: 0 1px 3px rgba(15,23,42,0.05);
+      }
+      .fg-banner b { font-size: 1.0rem; }
+      .fg-banner span { color: #475569; font-size: 0.93rem; }
+      .fg-receipt {
+        border-radius: 12px; padding: 14px 18px; margin: 6px 0;
+        background: #ecfdf5; border: 1.5px solid #059669; color: #064e3b;
+        font-size: 1.0rem;
+      }
+      button[data-baseweb="tab"] { font-size: 1.0rem; font-weight: 600; }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
 
-def dark_fig(fig: go.Figure, height=340) -> go.Figure:
+def banner(color: str, icon: str, who: str, decision: str):
+    st.markdown(
+        f"""<div class="fg-banner" style="border-left: 5px solid {color};">
+        <b>{icon} {who}</b><br><span><b>Decision this screen enables:</b> {decision}</span>
+        </div>""",
+        unsafe_allow_html=True,
+    )
+
+
+def clean_fig(fig: go.Figure, height=340) -> go.Figure:
     fig.update_layout(
-        template="plotly_dark",
+        template="plotly_white",
         paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(16,26,48,0.6)",
+        plot_bgcolor="#ffffff",
         height=height,
         margin=dict(l=40, r=20, t=40, b=30),
         font=dict(color=INK, size=13),
         legend=dict(orientation="h", y=1.12, x=0),
-        xaxis=dict(gridcolor=GRID),
-        yaxis=dict(gridcolor=GRID),
+        xaxis=dict(gridcolor=GRIDLINE),
+        yaxis=dict(gridcolor=GRIDLINE),
     )
     return fig
 
@@ -67,7 +91,7 @@ def dark_fig(fig: go.Figure, height=340) -> go.Figure:
 # ----------------------------------------------------------------------- #
 # Cached simulation + models
 # ----------------------------------------------------------------------- #
-@st.cache_resource(show_spinner="Building the digital twin (one simulated year)…")
+@st.cache_resource(show_spinner="Building the digital twin (one year of real Hanoi weather)…")
 def load_world():
     twin = FeederTwin()
     df = twin.simulate_year()
@@ -90,168 +114,205 @@ def cached_block(n_tr: int, storage_mwh: float, storage_mw: float, dc_mw: float,
 
 
 twin, df, mind, DEMO_DAY = load_world()
+res0 = cached_day(DEMO_DAY, 0.0, False, 0.7)
 
 # ----------------------------------------------------------------------- #
 # Header
 # ----------------------------------------------------------------------- #
 st.title("⚡ FirmGrid")
 st.markdown(
-    '<p class="fg-hero">The intelligence layer that turns Vietnam\'s wasted solar into '
-    "firm clean power — <b>Sun-to-Wheels</b> today, <b>Sun-to-Servers</b> next. "
-    "One 400 kVA Hanoi transformer: 30 PV homes, 25 non-PV homes, 3 C&amp;I rooftops, "
-    "2 swap stations, 1 e-taxi depot — simulated for a full year, auctioned every 15 minutes.</p>",
+    '<p class="fg-hero">One engine, every stakeholder: turn Vietnam\'s wasted rooftop solar '
+    "into firm clean power — <b>Sun-to-Wheels</b> today, <b>Sun-to-Servers</b> next.<br>"
+    f"🛰️ Weather: <b>{twin.data_source}</b> · demo runs fully offline · "
+    f"demo day: <b>{DEMO_DAY}</b> (worst curtailment day of the real year)</p>",
     unsafe_allow_html=True,
 )
 
 m = mind.metrics
 mc1, mc2, mc3, mc4 = st.columns(4)
-mc1.metric("GridMind congestion F1 (held-out days)", f"{m['congestion_f1']:.2f}")
-mc2.metric("Surplus forecast MAE", f"{m['surplus_mae_kw']:.1f} kW feeder-level")
-mc3.metric("Held-out test days", f"{m['test_days']}")
-mc4.metric("Transformer reverse-flow limit", f"{REVERSE_LIMIT_KW:.0f} kW")
+mc1.metric("Clean energy rescued today", f"{res0.recovered_kwh:.0f} kWh",
+           delta=f"{res0.recovered_kwh/max(res0.baseline_wasted_kwh,1)*100:.0f}% of what is wasted now")
+mc2.metric("Paid to solar families today", f"{res0.vnd_paid:,.0f} ₫")
+mc3.metric("Grid safety", f"{res0.baseline_breaches} → {res0.fg_breaches} breaches",
+           help="15-minute windows where reverse flow exceeds the safe limit, without vs with FirmGrid.")
+mc4.metric("Forecast skill (held-out days)", f"F1 = {m['congestion_f1']:.2f}",
+           help="Catches ~6 of every 7 transformer overloads an hour ahead, on real weather it never trained on.")
 
-tab1, tab2, tab3, tab4 = st.tabs(
-    [
-        "① Baseline vs FirmGrid ON",
-        "② Judge-in-the-loop",
-        "③ Firm Block Studio (Tier 2)",
-        "④ Impact & assumptions",
-    ]
-)
-
-# ======================================================================= #
-# TAB 1 — the counterfactual day
-# ======================================================================= #
-with tab1:
-    st.subheader(f"The same sunny day, twice — {DEMO_DAY}")
-    res = cached_day(DEMO_DAY, 0.0, False, 0.7)
-
-    c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric(
-        "Clean energy wasted (baseline)",
-        f"{res.baseline_wasted_kwh:.0f} kWh",
-        help="Feeder-wide curtailment: every export cut when the transformer nears its limit.",
-    )
-    c2.metric(
-        "Wasted with FirmGrid ON",
-        f"{res.fg_wasted_kwh:.0f} kWh",
-        delta=f"−{res.recovered_kwh:.0f} kWh recovered",
-        delta_color="inverse",
-    )
-    c3.metric("CO₂ avoided today", f"{res.co2_avoided_kg:.0f} kg")
-    c4.metric("Paid to households today", f"{res.vnd_paid:,.0f} ₫")
-    c5.metric(
-        "Limit breaches",
-        f"{res.baseline_breaches} → {res.fg_breaches}",
-        help="15-minute windows where reverse flow exceeds the safe limit.",
-    )
-
-    t = res.df_day.index
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=t, y=res.reverse_baseline_kw, name="Reverse flow — baseline",
-                             line=dict(color=RED, width=2)))
-    fig.add_trace(go.Scatter(x=t, y=res.reverse_fg_kw, name="Reverse flow — FirmGrid ON",
-                             line=dict(color=GREEN, width=2)))
-    fig.add_hline(y=REVERSE_LIMIT_KW, line_dash="dash", line_color=AMBER,
-                  annotation_text="safe limit", annotation_font_color=AMBER)
-    fig.update_layout(title="Transformer reverse flow (kW): blunt curtailment vs auctioned headroom")
-    st.plotly_chart(dark_fig(fig), width="stretch")
-
-    colA, colB = st.columns(2)
-    with colA:
-        fig2 = go.Figure()
-        fig2.add_trace(go.Scatter(x=t, y=res.df_day["surplus_total_kw"], name="Available surplus",
-                                  line=dict(color=AMBER, width=1.5), fill="tozeroy",
-                                  fillcolor="rgba(251,191,36,0.15)"))
-        fig2.add_trace(go.Scatter(x=t, y=res.df_day["station_baseline_kw"],
-                                  name="Station charging — uncoordinated (evening, coal)",
-                                  line=dict(color=RED, width=2, dash="dot")))
-        fig2.add_trace(go.Scatter(x=t, y=res.steered_station_kw,
-                                  name="Station charging — FlexMatch (solar window)",
-                                  line=dict(color=BLUE, width=2)))
-        fig2.update_layout(title="Sun-to-Wheels: swap-station charging moves into the sun")
-        st.plotly_chart(dark_fig(fig2), width="stretch")
-    with colB:
-        st.markdown("**HeadRoom auction log (every 2 hours)** — every decision explainable:")
-        st.dataframe(pd.DataFrame(res.allocations_log), width="stretch", height=250)
-        st.markdown(
-            f"- FlexMatch shifted **{res.flex_stats['shifted_kwh']:.0f} kWh** of station charging "
-            f"into the solar window → stations save **{res.flex_stats['station_saving_vnd']:,.0f} ₫** today.\n"
-            f"- Fairness bound: longest any household waited = "
-            f"**{res.fairness_max_wait} consecutive rejections**.\n"
-            f"- TrustLedger chain valid: **{res.ledger.verify_chain()}** "
-            f"({len(res.ledger.blocks)} hash-chained events)."
-        )
+tabs = st.tabs([
+    "⚡ Grid operator (EVN)",
+    "🏠 Solar households",
+    "🔋 Swap stations & fleets",
+    "🏢 Data centres",
+    "🌏 City & judges",
+])
 
 # ======================================================================= #
-# TAB 2 — judge-in-the-loop
+# TAB 1 — GRID OPERATOR
 # ======================================================================= #
-with tab2:
-    st.subheader("Break it yourself")
-    st.markdown(
-        "Drag a storm front over the feeder, or inject a fraudulent bid — "
-        "forecasts, the auction and Sentinel all re-clear live."
-    )
-    jc1, jc2, jc3 = st.columns([2, 1, 1])
-    cloud = jc1.slider("☁️ Storm front — % of solar wiped out", 0, 90, 0, 5) / 100.0
-    fraud = jc2.toggle("💀 Inject fraudulent 8 kW bid (household H03)", value=False)
-    flex = jc3.slider("FlexMatch shift share", 0.0, 1.0, 0.7, 0.1)
+with tabs[0]:
+    banner(GREEN, "⚡", "EVN distribution operator — the control room",
+           "when and how little to curtail, window by window — instead of cutting the whole feeder.")
 
-    jres = cached_day(DEMO_DAY, cloud, fraud, flex)
+    c1, c2 = st.columns([3, 1])
+    tsel = c1.slider("Scrub through the day (15-minute windows)", 0, 95, 49, 1, key="op_t")
+    storm = c2.slider("☁️ Stress-test: storm front (% solar lost)", 0, 90, 0, 10, key="op_storm")
+    opres = cached_day(DEMO_DAY, storm / 100.0, False, 0.7) if storm else res0
+    tstamp = opres.df_day.index[tsel]
 
-    j1, j2, j3, j4 = st.columns(4)
-    j1.metric("Recovered today", f"{jres.recovered_kwh:.0f} kWh")
-    j2.metric("CO₂ avoided", f"{jres.co2_avoided_kg:.0f} kg")
-    j3.metric("Households paid", f"{jres.vnd_paid:,.0f} ₫")
-    j4.metric("Breaches (FirmGrid ON)", jres.fg_breaches)
+    m1, m2 = st.columns(2)
+    with m1:
+        st.plotly_chart(feeder_map(twin, opres, tsel, mode="base"), width="stretch", key="op_map_b")
+    with m2:
+        st.plotly_chart(feeder_map(twin, opres, tsel, mode="on"), width="stretch", key="op_map_on")
 
-    if fraud:
-        for msg in jres.fraud_events:
-            st.error(f"🛡️ Sentinel — {msg}")
-        if not jres.fraud_events:
-            st.warning("Fraud bid was within physical limits this window — try a cloudier day.")
+    g1, g2, g3 = st.columns([1, 1, 2])
+    with g1:
+        st.plotly_chart(tx_gauge(unmanaged_reverse(opres, tsel),
+                                 "Unmanaged flow (forces today's cut)"), width="stretch", key="op_g1")
+    with g2:
+        st.plotly_chart(tx_gauge(float(opres.reverse_fg_kw[tsel]),
+                                 "Managed flow — FirmGrid"), width="stretch", key="op_g2")
+    with g3:
+        t = opres.df_day.index
+        figr = go.Figure()
+        figr.add_trace(go.Scatter(x=t, y=opres.reverse_baseline_kw, name="Reverse flow — today",
+                                  line=dict(color=RED, width=2)))
+        figr.add_trace(go.Scatter(x=t, y=opres.reverse_fg_kw, name="Reverse flow — FirmGrid",
+                                  line=dict(color=GREEN, width=2)))
+        figr.add_hline(y=REVERSE_LIMIT_KW, line_dash="dash", line_color=AMBER,
+                       annotation_text="safe limit", annotation_font_color=AMBER)
+        figr.update_layout(title="The whole day at a glance")
+        st.plotly_chart(clean_fig(figr, height=300), width="stretch", key="op_day")
 
-    t = jres.df_day.index
-    figj = go.Figure()
-    figj.add_trace(go.Scatter(x=t, y=jres.df_day["surplus_total_kw"], name="Surplus after storm",
-                              line=dict(color=AMBER, width=2), fill="tozeroy",
-                              fillcolor="rgba(251,191,36,0.12)"))
-    figj.add_trace(go.Scatter(x=t, y=jres.reverse_fg_kw, name="Reverse flow — FirmGrid ON",
-                              line=dict(color=GREEN, width=2)))
-    figj.add_hline(y=REVERSE_LIMIT_KW, line_dash="dash", line_color=AMBER)
-    figj.update_layout(title="The system stays inside the safe envelope, whatever you throw at it")
-    st.plotly_chart(dark_fig(figj), width="stretch")
-
+    st.plotly_chart(day_sankey(opres, "on"), width="stretch", key="op_sankey")
+    with st.expander("📋 Auction log — every decision, explained in one sentence"):
+        st.dataframe(pd.DataFrame(opres.allocations_log), width="stretch", height=240)
     st.caption(
-        "Safety posture: the auction never allocates more than 90% of forecast headroom, "
-        "bids are hard-capped at physically possible surplus, and a human operator override "
-        "outranks every automated decision."
+        "Safety posture: never allocate above 90% of forecast headroom · bids capped at "
+        "physical reality · operator override outranks every automated decision."
     )
 
 # ======================================================================= #
-# TAB 3 — Firm Block Studio (Tier 2)
+# TAB 2 — HOUSEHOLDS
 # ======================================================================= #
-with tab3:
-    st.subheader("Sun-to-Servers — shape a firm 24/7 block for a data centre")
+with tabs[1]:
+    banner(AMBER, "🏠", "Prosumer families — the people who paid for the panels",
+           "none needed: switch on Auto-Sell once, earn passively — with a fair queue and a "
+           "verifiable payment trail.")
+
+    sold_per_home = res0.home_accepted_kw.sum(axis=0) * 0.25
+    offered_per_home = res0.home_surplus_kw.sum(axis=0) * 0.25
+    earn_per_home = sold_per_home * 700.0
+    pv_ids = [h.hid for h in twin.households if h.kwp > 0]
+
+    h1, h2, h3, h4 = st.columns(4)
+    h1.metric("Families paid today", f"{int((earn_per_home > 0).sum())}")
+    h2.metric("Neighbourhood earnings", f"{res0.vnd_paid:,.0f} ₫")
+    h3.metric("Longest wait for a 'yes'", f"{res0.fairness_max_wait} window(s)",
+              help="Fairness bound: every rejection earns a priority credit for the next auction.")
+    h4.metric("Payment trail verified", "✓ ledger intact" if res0.ledger.verify_chain() else "✗",
+              help=f"{len(res0.ledger.blocks)} events, each hash-chained to the previous one.")
+
+    st.markdown("##### Pick a family")
+    hid = st.selectbox("Household", pv_ids, index=1,
+                       format_func=lambda i: f"H{i:02d} · {twin.households[i].kwp:.1f} kWp rooftop",
+                       key="home_pick")
+    p1, p2 = st.columns([1, 2])
+    with p1:
+        st.markdown(
+            f"""<div class="fg-receipt">📱 <b>Hôm nay bạn kiếm được
+            {earn_per_home[hid]:,.0f} ₫</b><br>
+            Sold {sold_per_home[hid]:.1f} of {offered_per_home[hid]:.1f} kWh surplus ·
+            Auto-Sell ON · paid to your e-wallet</div>""",
+            unsafe_allow_html=True,
+        )
+        declined = int(((res0.home_surplus_kw[:, hid] > 0.05)
+                        & (res0.home_accepted_kw[:, hid] <= 1e-3)).sum())
+        st.markdown(
+            f"- Windows declined today: **{declined}** (each earned a priority credit)\n"
+            f"- Every outcome explainable: bid → auction → meter → payment\n"
+            f"- You never pay anything to participate."
+        )
+        fraud = st.toggle("💀 Try to cheat: bid 15 kW (more than this roof can make)", key="home_fraud")
+        if fraud:
+            fres = cached_day(DEMO_DAY, 0.0, True, 0.7)
+            for msg in fres.fraud_events:
+                st.error(f"🛡️ Sentinel — {msg}")
+    with p2:
+        t = res0.df_day.index
+        figh = go.Figure()
+        figh.add_trace(go.Scatter(x=t, y=res0.home_surplus_kw[:, hid], name="Your surplus",
+                                  line=dict(color=AMBER, width=1.5), fill="tozeroy",
+                                  fillcolor="rgba(217,119,6,0.12)"))
+        figh.add_trace(go.Scatter(x=t, y=res0.home_accepted_kw[:, hid], name="Sold via auction",
+                                  line=dict(color=GREEN, width=2)))
+        figh.update_layout(title=f"H{hid:02d} — your day, kW")
+        st.plotly_chart(clean_fig(figh, height=330), width="stretch", key="home_fig")
+
+# ======================================================================= #
+# TAB 3 — SWAP STATIONS & FLEETS
+# ======================================================================= #
+with tabs[2]:
+    banner(BLUE, "🔋", "Battery-swap stations & e-taxi depots — the flexible demand",
+           "when to charge: follow the solar-window schedule, cut your power bill, and sell "
+           "'charged on sunshine' to riders.")
+
+    flex = st.slider("How much of daily charging follows FirmGrid's schedule", 0.0, 1.0, 0.7, 0.1,
+                     key="st_flex")
+    sres = cached_day(DEMO_DAY, 0.0, False, flex)
+    fs = sres.flex_stats
+
+    s1, s2, s3, s4 = st.columns(4)
+    s1.metric("Charging moved into the sun", f"{fs['shifted_kwh']:.0f} kWh/day")
+    s2.metric("Saved on tariffs", f"{fs['station_saving_vnd']:,.0f} ₫/day",
+              delta=f"≈ {fs['station_saving_vnd']*365/1e6:.0f}M ₫/yr across the 3 sites")
+    s3.metric("CO₂ avoided (charging)", f"{fs['co2_avoided_kg']:.0f} kg/day")
+    s4.metric("Per battery swap", "≈ 1 kg CO₂ avoided",
+              help="Midday solar charging vs the coal-heavy evening margin — printed on the rider's receipt.")
+
+    t = sres.df_day.index
+    figs = go.Figure()
+    figs.add_trace(go.Scatter(x=t, y=sres.df_day["surplus_total_kw"], name="Neighbourhood solar surplus",
+                              line=dict(color=AMBER, width=1.5), fill="tozeroy",
+                              fillcolor="rgba(217,119,6,0.10)"))
+    figs.add_trace(go.Scatter(x=t, y=sres.df_day["station_baseline_kw"],
+                              name="Your charging — today (uncoordinated, evening)",
+                              line=dict(color=RED, width=2, dash="dot")))
+    figs.add_trace(go.Scatter(x=t, y=sres.steered_station_kw,
+                              name="Your charging — FirmGrid schedule",
+                              line=dict(color=BLUE, width=2.5)))
+    figs.update_layout(title="Sun-to-Wheels: charging moves under the sunshine curve")
+    st.plotly_chart(clean_fig(figs, height=360), width="stretch", key="st_fig")
+
     st.markdown(
-        "The same engine, aggregated: N orchestrated transformers + shared storage are shaped "
-        "into an hour-matched clean block sold via DPPA. Data-centre demand is mandated "
-        "**≥50% green by 2030** — this is where Tier 1's data flywheel becomes Tier 2's product."
+        f"""<div class="fg-receipt">🛵 Rider receipt at 18:40 — <b>“Pin nạp lúc 12:10 —
+        98% năng lượng mặt trời · ~0,9 kg CO₂ tránh được”</b> ·
+        evening kilometres, morning sunshine.</div>""",
+        unsafe_allow_html=True,
     )
+
+# ======================================================================= #
+# TAB 4 — DATA CENTRES (Tier 2)
+# ======================================================================= #
+with tabs[3]:
+    banner(GREEN, "🏢", "Data centres & large buyers — mandated ≥50% green by 2030",
+           "your DPPA: how much firm, hour-matched clean power to contract, and at what price.")
+
     b1, b2, b3, b4, b5 = st.columns(5)
-    n_tr = b1.slider("Orchestrated transformers", 100, 2000, 800, 100)
-    dc_mw = b2.slider("Data-centre load (MW)", 5, 50, 20, 5)
-    storage_mwh = b3.slider("Storage (MWh)", 0, 500, 160, 20)
-    storage_mw = b4.slider("Storage power (MW)", 5, 100, 40, 5)
-    rec = b5.slider("Recovery rate", 0.3, 0.9, 0.7, 0.05)
+    n_tr = b1.slider("Orchestrated transformers", 100, 2000, 800, 100, key="dc_tr")
+    dc_mw = b2.slider("Your load (MW)", 5, 50, 20, 5, key="dc_mw")
+    storage_mwh = b3.slider("Storage (MWh)", 0, 500, 160, 20, key="dc_smwh")
+    storage_mw = b4.slider("Storage power (MW)", 5, 100, 40, 5, key="dc_smw")
+    rec = b5.slider("Recovery rate", 0.3, 0.9, 0.7, 0.05, key="dc_rec")
 
     blk = cached_block(n_tr, float(storage_mwh), float(storage_mw), float(dc_mw), float(rec))
 
     k1, k2, k3, k4 = st.columns(4)
     k1.metric("Hourly CFE match", f"{blk['cfe_score']*100:.0f}%",
-              help="Share of the data centre's load covered by hour-matched clean energy.")
-    k2.metric("Blended block cost", f"${blk['blended_cost_usd_mwh']:.0f}/MWh",
-              delta=f"grid: ${blk['grid_cost_usd_mwh']:.0f}/MWh")
+              help="Share of your load covered by clean energy in the same hour it is consumed — "
+                   "the 24/7 standard your green mandate will be audited against.")
+    k2.metric("Blended block price", f"${blk['blended_cost_usd_mwh']:.0f}/MWh",
+              delta=f"vs grid tariff ${blk['grid_cost_usd_mwh']:.0f}/MWh", delta_color="off")
     k3.metric("Clean energy delivered", f"{blk['clean_gwh']:.1f} GWh/yr")
     k4.metric("CO₂ avoided", f"{blk['co2_avoided_t_per_year']:,.0f} t/yr")
 
@@ -262,65 +323,59 @@ with tab3:
     figb.add_trace(go.Bar(x=bh.index, y=bh["battery_mw"], name="Storage (solar-charged)",
                           marker_color=GREEN))
     figb.add_trace(go.Bar(x=bh.index, y=bh["grid_mw"], name="Residual grid",
-                          marker_color="rgba(148,163,184,0.5)"))
-    figb.update_layout(barmode="stack",
-                       title="Average day, hour by hour: what serves the data centre",
+                          marker_color="rgba(100,116,139,0.45)"))
+    figb.update_layout(barmode="stack", title="Your average day, hour by hour",
                        xaxis_title="hour of day", yaxis_title="MW")
-    st.plotly_chart(dark_fig(figb, height=380), width="stretch")
-
+    st.plotly_chart(clean_fig(figb, height=380), width="stretch", key="dc_fig")
     st.caption(
         "Indicative economics: recovered firm solar $60/MWh (IRENA band $54–82), storage cycling "
-        "$45/MWh throughput, grid tariff $92/MWh. Every parameter is a slider or a constant a "
-        "judge can change."
+        "$45/MWh throughput, grid tariff $92/MWh — every number a judge can change."
     )
 
 # ======================================================================= #
-# TAB 4 — impact arithmetic with assumptions on the table
+# TAB 5 — CITY & JUDGES
 # ======================================================================= #
-with tab4:
-    st.subheader("Impact arithmetic — every assumption adjustable")
+with tabs[4]:
+    banner(RED, "🌏", "Hanoi, policymakers — and today, the judges",
+           "whether the numbers hold: change any assumption and watch the impact recompute.")
+
     a1, a2, a3 = st.columns(3)
     with a1:
-        homes = st.slider("PV homes per constrained transformer", 10, 60, 30)
-        kwp = st.slider("Average system size (kWp)", 3.0, 10.0, 5.0, 0.5)
+        homes = st.slider("PV homes per constrained transformer", 10, 60, 30, key="j_homes")
+        kwp = st.slider("Average system size (kWp)", 3.0, 10.0, 5.0, 0.5, key="j_kwp")
     with a2:
-        yield_kwh = st.slider("Specific yield (kWh/kWp·yr)", 900, 1300, 1050, 25)
-        curt = st.slider("Share lost to curtailment (%)", 5, 30, 15) / 100
+        yield_kwh = st.slider("Specific yield (kWh/kWp·yr)", 900, 1300, 1050, 25, key="j_yield")
+        curt = st.slider("Share lost to curtailment (%)", 5, 30, 15, key="j_curt") / 100
     with a3:
-        recov = st.slider("FirmGrid recovery rate (%)", 40, 90, 70) / 100
-        ntr = st.slider("Constrained transformers (Hanoi)", 100, 3000, 1000, 100)
+        recov = st.slider("FirmGrid recovery rate (%)", 40, 90, 70, key="j_rec") / 100
+        ntr = st.slider("Constrained transformers (Hanoi)", 100, 3000, 1000, 100, key="j_ntr")
 
     ef = 0.681  # official 2024 Vietnam grid emission factor, tCO2/MWh
     per_tr_mwh = homes * kwp * yield_kwh * curt / 1000.0
     rec_tr = per_tr_mwh * recov
     city_gwh = rec_tr * ntr / 1000.0
-    city_co2 = city_gwh * 1000 * ef / 1000.0  # t
+    city_co2 = city_gwh * 1000 * ef / 1000.0
+    homes_equiv = int(city_gwh * 1e6 / 2800 / 1000) * 1000
 
     i1, i2, i3, i4 = st.columns(4)
-    i1.metric("Curtailed per transformer", f"{per_tr_mwh:.1f} MWh/yr")
-    i2.metric("Recovered per transformer", f"{rec_tr:.1f} MWh/yr")
-    i3.metric("Hanoi rollout recovery", f"{city_gwh:.1f} GWh/yr")
+    i1.metric("Stranded per transformer", f"{per_tr_mwh:.1f} MWh/yr")
+    i2.metric("Rescued per transformer", f"{rec_tr:.1f} MWh/yr")
+    i3.metric("Hanoi rollout", f"{city_gwh:.1f} GWh/yr",
+              delta=f"a year's power for ~{homes_equiv:,} homes")
     i4.metric("CO₂ avoided (supply side)", f"{city_co2:,.0f} t/yr")
 
     st.markdown(
         f"""
 **The chain, written out** — {homes} homes × {kwp:.1f} kWp × {yield_kwh} kWh/kWp·yr ×
-{curt*100:.0f}% curtailed = **{per_tr_mwh:.1f} MWh/yr** stranded per transformer.
-FirmGrid recovers {recov*100:.0f}% → **{rec_tr:.1f} MWh/yr**. Across {ntr:,} constrained
-Hanoi transformers → **{city_gwh:.1f} GWh/yr ≈ {city_co2:,.0f} t CO₂/yr**
-(grid factor {ef} tCO₂/MWh, official 2024 value).
+{curt*100:.0f}% curtailed = **{per_tr_mwh:.1f} MWh/yr** stranded per transformer →
+recover {recov*100:.0f}% → × {ntr:,} transformers = **{city_gwh:.1f} GWh/yr ≈
+{city_co2:,.0f} t CO₂/yr** (official 2024 grid factor {ef}).
 
-**Mobility side (Tier 1):** replacing 450,000 petrol motorbikes ≈ 100 GWh/yr of new charging
-demand in Hanoi. Steering 20–30% into the solar window avoids a further **16,000–27,000 t CO₂/yr**
-— about **1 kg CO₂ per swap**, printed on the rider's receipt.
+**Mobility:** steering 20–30% of the LEZ's ~100 GWh/yr charging wave into the solar window
+avoids a further **16,000–27,000 t CO₂/yr** — like planting a million trees, every year.
 
-**Digital side (Tier 2):** data-centre demand ~735 MW (2025) → **1,330–1,543 MW by 2030**,
-mandated ≥50% green. One 20 MW block at the CFE score shown in Tab ③ is the proof-of-product
-for Vietnam's first firm-solar DPPA.
+**Digital economy:** data-centre demand doubles to ~1,500 MW by 2030 under a ≥50% green
+mandate — the Tier-2 buyer for firm blocks (see the Data centres tab).
         """
     )
-    st.caption(
-        "Households: ~800 kWh/yr recovered ≈ 560k ₫ at the Decree-58 reference price, "
-        "0.6–1.0M ₫ with FlexMatch premiums. Stations: ≈27–44M ₫/yr saved. "
-        "EVN: transformer reinforcement deferred at hundreds of millions ₫ per site."
-    )
+    st.caption("SDG 7 · 9 · 11 · 13 — and every parameter above is deliberately yours to move.")

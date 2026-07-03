@@ -1,10 +1,13 @@
 # FirmGrid Prototype
 
 The working MVP for the Asian Hackathon for Green Future 2026 (Track 1).
-A digital twin of one Hanoi 400 kVA distribution feeder, a congestion/surplus
-forecasting layer, a fair headroom auction, mobility demand steering, a
-hash-chained settlement ledger — and a Tier-2 "firm block" simulator for
-data-centre DPPAs. **Fully offline: no network calls, no API keys.**
+A digital twin of one Hanoi 400 kVA distribution feeder — driven by **12
+months of real Hanoi weather** (Open-Meteo archive, Jul 2025 – Jun 2026,
+cached in `data/hanoi_weather.csv`) — plus a congestion/surplus forecasting
+layer, a fair headroom auction, mobility demand steering, a hash-chained
+settlement ledger, and a Tier-2 "firm block" simulator for data-centre DPPAs.
+**The demo is fully offline: the weather cache ships with the repo; re-fetch
+with `python fetch_data.py` only if you want fresher data.**
 
 ## Run
 
@@ -27,12 +30,15 @@ scenario never does worse than baseline.
 
 ## What each tab demonstrates (the decisions, not the dashboard)
 
-| Tab | Decision demonstrated |
+One tab per stakeholder — each opens with who it serves and the decision it enables:
+
+| Tab | Stakeholder & decision |
 |---|---|
-| ① Baseline vs FirmGrid ON | Blunt feeder-wide curtailment vs auctioned minimal curtailment — same day, live counters (kWh, CO₂, ₫, breaches). |
-| ② Judge-in-the-loop | Storm-front slider re-clears forecasts + auction; injected 15 kW fraud bid blocked by Sentinel pre-auction. |
-| ③ Firm Block Studio | Tier 2: shape a 24/7 hour-matched clean block for a 20 MW data centre; CFE score + blended $/MWh vs grid tariff. |
-| ④ Impact & assumptions | The full impact arithmetic with every parameter on a slider. |
+| ⚡ Grid operator (EVN) | When and how little to curtail: animated feeder maps (today vs FirmGrid), unmanaged/managed gauges, whole-day chart, storm-front stress test, Sankey, auction log. |
+| 🏠 Solar households | Earn passively, fairly: per-family receipt & chart, fairness bound, ledger check, "try to cheat" Sentinel demo. |
+| 🔋 Swap stations & fleets | When to charge: schedule slider, savings/CO₂ cards (~1 kg per swap), charging-under-the-sun chart, rider receipt. |
+| 🏢 Data centres | Size your DPPA: firm-block sliders, hourly CFE score, blended $/MWh vs grid tariff. |
+| 🌏 City & judges | Verify the impact: every assumption on a slider, arithmetic written out. |
 
 ## Module map
 

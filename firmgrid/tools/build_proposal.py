@@ -34,6 +34,7 @@ def build_docx() -> Path:
     style = doc.styles["Normal"]
     style.font.name = "Calibri"
     style.font.size = Pt(10)
+    style.paragraph_format.line_spacing = 1.18
 
     h = doc.add_paragraph()
     h.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -67,7 +68,8 @@ def build_docx() -> Path:
 
     for sec_title, blocks in SECTIONS:
         hp = doc.add_paragraph()
-        hp.space_before = Pt(8)
+        hp.paragraph_format.space_before = Pt(12)
+        hp.paragraph_format.space_after = Pt(4)
         r = hp.add_run(sec_title)
         r.bold = True
         r.font.size = Pt(11)
@@ -75,11 +77,11 @@ def build_docx() -> Path:
         for kind, payload in blocks:
             if kind == "p":
                 para = doc.add_paragraph(payload)
-                para.paragraph_format.space_after = Pt(4)
+                para.paragraph_format.space_after = Pt(6)
             elif kind == "bullets":
                 for b in payload:
                     para = doc.add_paragraph(b, style="List Bullet")
-                    para.paragraph_format.space_after = Pt(2)
+                    para.paragraph_format.space_after = Pt(3)
 
     path = OUT / f"{BASE}.docx"
     doc.save(path)
@@ -90,21 +92,27 @@ def build_docx() -> Path:
 # HTML -> PDF (Chrome headless)
 # --------------------------------------------------------------------- #
 CSS = """
-@page { size: A4; margin: 16mm 15mm; }
-body { font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 9.5pt;
-       color: #1a2333; line-height: 1.38; }
-.head { text-align: center; font-weight: 700; font-size: 12.5pt; color: #0f2a4a; }
-.title { text-align: center; font-weight: 700; font-size: 11pt; color: #1e7a46;
-         margin: 4px 0 10px; }
-h2 { font-size: 10.5pt; color: #0f2a4a; border-bottom: 1.5px solid #1e7a46;
-     padding-bottom: 2px; margin: 10px 0 5px; }
-p { margin: 0 0 5px; text-align: justify; }
-ul { margin: 0 0 5px 16px; padding: 0; }
-li { margin-bottom: 2.5px; text-align: justify; }
+@page { size: A4; margin: 13mm 13mm; }
+body { font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 9.2pt;
+       color: #1f2937; line-height: 1.44; }
+.head { text-align: center; font-weight: 700; font-size: 12.5pt; color: #0f2a4a;
+        letter-spacing: 0.4px; }
+.title { text-align: center; font-weight: 700; font-size: 10.5pt; color: #1e7a46;
+         margin: 4px 0 9px; line-height: 1.35; }
+h2 { font-size: 10.3pt; color: #0f2a4a; margin: 10px 0 6px;
+     border-left: 4px solid #1e7a46; background: #f2f7f3;
+     padding: 2.5px 8px; border-radius: 2px; letter-spacing: 0.3px;
+     page-break-after: avoid; }
+p { margin: 0 0 6px; text-align: left; }
+ul { margin: 0 0 7px 15px; padding: 0; }
+li { margin-bottom: 4px; text-align: left; }
 table { border-collapse: collapse; width: 100%; margin: 4px 0 8px; }
-td, th { border: 1px solid #94a3b8; padding: 2.5px 7px; font-size: 9.5pt; text-align: left; }
+td, th { border: 1px solid #b6c2d2; padding: 3px 8px; font-size: 9.2pt; text-align: left; }
 th { background: #eef4ee; }
-.team { font-weight: 700; margin-top: 6px; }
+.team { font-weight: 700; margin-top: 7px; }
+.refs ul { column-count: 2; column-gap: 6mm; margin-left: 13px; }
+.refs li { font-size: 8.1pt; line-height: 1.35; margin-bottom: 3.5px;
+           break-inside: avoid; color: #374151; }
 """
 
 
@@ -124,6 +132,9 @@ def build_html_pdf() -> Path:
     parts.append("</table>")
 
     for sec_title, blocks in SECTIONS:
+        is_refs = sec_title.startswith("8.")
+        if is_refs:
+            parts.append("<div class='refs'>")
         parts.append(f"<h2>{html.escape(sec_title)}</h2>")
         for kind, payload in blocks:
             if kind == "p":
@@ -132,6 +143,8 @@ def build_html_pdf() -> Path:
                 parts.append(
                     "<ul>" + "".join(f"<li>{html.escape(b)}</li>" for b in payload) + "</ul>"
                 )
+        if is_refs:
+            parts.append("</div>")
 
     html_path = OUT / f"{BASE}.html"
     html_path.write_text("\n".join(parts), encoding="utf-8")
