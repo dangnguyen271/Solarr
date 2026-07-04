@@ -5,7 +5,7 @@ Structure: list of (kind, payload) blocks per section.
 kinds: h1, h2, p, bullets, table (rows = list of lists, first row = header).
 """
 
-TEAM_NAME = "[TEAM_NAME]"
+TEAM_NAME = "The Broke Three"
 PROJECT = "FirmGrid"
 TITLE = (
     "FirmGrid — Sun-to-Wheels & Sun-to-Servers: the intelligence layer that turns "
