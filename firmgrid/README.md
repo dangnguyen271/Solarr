@@ -119,7 +119,8 @@ firmgrid/
 │   ├── index.html · styles.css · ui.js · mock-data.js · app.js
 │   └── README.md
 ├── prototype/                ← Streamlit decision engine
-│   ├── app.py                ← dashboard (5 stakeholder tabs)
+│   ├── app.py                ← dashboard (GridMind Ops console + 5 stakeholder tabs)
+│   ├── opsview.py            ← ops console: energy-routing network, forecast, order book
 │   ├── twin.py               ← digital twin (real Hanoi weather)
 │   ├── gridmind.py           ← forecasting (congestion + surplus)
 │   ├── auction.py            ← fair HeadRoom clearing (MILP)

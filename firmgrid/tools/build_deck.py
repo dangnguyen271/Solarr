@@ -176,8 +176,8 @@ kicker(s, "PROBLEM", "30s")
 headline(s, "Wasted at noon. Coal at night. And 2026 makes it worse.")
 y, w3 = Inches(1.95), Inches(3.93)
 stat_tile(s, Inches(0.6), y, w3, Inches(1.85), "~19 GW",
-          "of solar already built — 8× the planned Ninh Thuận nuclear plant — "
-          "yet cut feeder-wide on sunny mornings", AMBER)
+          "of solar already built — a year's power for ~10 million homes — "
+          "yet curtailed feeder-wide on sunny mornings", AMBER)
 stat_tile(s, Inches(4.7), y, w3, Inches(1.85), "450,000",
           "petrol bikes replaced under Hanoi's LEZ — 1 in 15 of the city's motorbikes — "
           "set to charge on evening coal", GREEN)

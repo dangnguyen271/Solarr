@@ -30,10 +30,11 @@ scenario never does worse than baseline.
 
 ## What each tab demonstrates (the decisions, not the dashboard)
 
-One tab per stakeholder — each opens with who it serves and the decision it enables:
+The first tab is the intelligence layer's own console; the rest are one per stakeholder:
 
 | Tab | Stakeholder & decision |
 |---|---|
+| 🛰 GridMind Ops | The intelligence layer itself: a live **energy-routing network** (every kW from roof → transformer → stations / homes / upstream grid, per 15-min window), probabilistic surplus forecast with P10–P90 band + overload-risk strip, the window's order book (offer/cleared/fill/status per seller), hash-stamped settlement feed, and scenario controls (window, cloud cover, demand steering). |
 | ⚡ Grid operator (EVN) | When and how little to curtail: animated feeder maps (today vs FirmGrid), unmanaged/managed gauges, whole-day chart, storm-front stress test, Sankey, auction log. |
 | 🏠 Solar households | Earn passively, fairly: per-family receipt & chart, fairness bound, ledger check, "try to cheat" Sentinel demo. |
 | 🔋 Swap stations & fleets | When to charge: schedule slider, savings/CO₂ cards (~1 kg per swap), charging-under-the-sun chart, rider receipt. |

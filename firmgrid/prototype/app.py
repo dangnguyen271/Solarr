@@ -16,6 +16,7 @@ from firmblock import build_firm_block
 from gridmind import GridMind
 from mapview import day_sankey, feeder_map, tx_gauge, unmanaged_reverse
 from market import run_day
+from opsview import flow_network, forecast_panel, ledger_feed, order_book, window_flows
 from twin import REVERSE_LIMIT_KW, FeederTwin, pick_demo_day
 
 # ----------------------------------------------------------------------- #
@@ -62,6 +63,46 @@ st.markdown(
         font-size: 1.0rem;
       }
       button[data-baseweb="tab"] { font-size: 1.0rem; font-weight: 600; }
+
+      /* ---- GridMind Ops console (dark) ---- */
+      .ops-head {
+        background: #0a0f1c; border: 1px solid #1c2942; border-radius: 10px;
+        padding: 10px 16px; margin-bottom: 10px;
+        font-family: Menlo, Consolas, monospace; font-size: .78rem; color: #5b6b82;
+        display: flex; gap: 18px; flex-wrap: wrap; align-items: center;
+      }
+      .ops-head b { color: #dbe4f0; font-weight: 600; }
+      .ops-head .ok { color: #2fd6a3; } .ops-head .warn { color: #f5b83d; }
+      .ops-kpis { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-bottom: 10px; }
+      .ops-kpi {
+        background: #0e1526; border: 1px solid #1c2942; border-radius: 8px; padding: 9px 12px;
+        font-family: Menlo, Consolas, monospace;
+      }
+      .ops-kpi .k { font-size: .64rem; color: #5b6b82; letter-spacing: .06em; }
+      .ops-kpi .v { font-size: 1.12rem; color: #dbe4f0; font-weight: 700; margin-top: 2px; }
+      .ops-kpi .v.cyan { color: #39c5cf; } .ops-kpi .v.amber { color: #f5b83d; }
+      .ops-kpi .v.teal { color: #2fd6a3; } .ops-kpi .v.red { color: #f0564f; }
+      .ops-table {
+        width: 100%; border-collapse: collapse; background: #0e1526;
+        font-family: Menlo, Consolas, monospace; font-size: .74rem;
+        border: 1px solid #1c2942; border-radius: 8px;
+      }
+      .ops-table th { color: #5b6b82; text-align: left; padding: 7px 10px;
+        border-bottom: 1px solid #1c2942; font-weight: 600; letter-spacing: .05em; }
+      .ops-table td { color: #dbe4f0; padding: 6px 10px; border-bottom: 1px solid #131d33; }
+      .ops-table .r { text-align: right; }
+      .ops-fill { display: inline-block; width: 54px; height: 7px; border-radius: 4px;
+        background: #1c2942; vertical-align: middle; overflow: hidden; }
+      .ops-fill span { display: block; height: 100%; background: #2fd6a3; }
+      .st-FILLED { color: #2fd6a3; } .st-PARTIAL { color: #f5b83d; } .st-DECLINED { color: #f0564f; }
+      .ops-log {
+        background: #0a0f1c; border: 1px solid #1c2942; border-radius: 8px;
+        padding: 10px 12px; font-family: Menlo, Consolas, monospace; font-size: .72rem;
+        line-height: 1.75; max-height: 330px; overflow-y: auto;
+      }
+      .ops-log .h { color: #39c5cf; } .ops-log .t { color: #5b6b82; }
+      .ops-log .m { color: #dbe4f0; }
+      .ops-log .fraud .m { color: #f0564f; } .ops-log .seal .m { color: #f5b83d; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -111,6 +152,17 @@ def cached_day(date: str, cloud: float, fraud: bool, flex: float):
     return run_day(twin, df, mind, date, cloud_dim=cloud, fraud_bid=fraud_bid, flex_share=flex)
 
 
+@st.cache_data(show_spinner=False)
+def cached_forecast(date: str, cloud: float):
+    _, df, mind, _ = load_world()
+    fc = mind.predict_day(df, date)
+    if cloud > 0:
+        fc = fc.copy()
+        fc["surplus_forecast_kw"] *= (1.0 - cloud)
+        fc["surplus_actual_kw"] *= (1.0 - cloud)
+    return fc
+
+
 @st.cache_data(show_spinner="Shaping the 24/7 firm block…")
 def cached_block(n_tr: int, storage_mwh: float, storage_mw: float, dc_mw: float, rec: float):
     _, df, _, _ = load_world()
@@ -152,6 +204,7 @@ mc4.metric("Forecast accuracy", f"F1 = {m['congestion_f1']:.2f}",
            help="Predicts a transformer overload about an hour ahead — catches roughly 6 of every 7, measured on days not used for training.")
 
 tabs = st.tabs([
+    "🛰 GridMind Ops",
     "⚡ Grid operator (EVN)",
     "🏠 Solar households",
     "🔋 Swap stations & fleets",
@@ -160,9 +213,94 @@ tabs = st.tabs([
 ])
 
 # ======================================================================= #
-# TAB 1 — GRID OPERATOR
+# TAB 0 — GRIDMIND OPS (the intelligence layer's own console)
 # ======================================================================= #
 with tabs[0]:
+    oc1, oc2, oc3 = st.columns([3, 1, 1])
+    ot = oc1.slider("Market window", 0, 95, 49, 1, key="ops_t",
+                    help="Each step is one 15-minute clearing cycle.")
+    ocloud = oc2.slider("☁️ Cloud cover %", 0, 90, 0, 10, key="ops_cloud")
+    oflex = oc3.slider("Demand steering", 0.0, 1.0, 0.7, 0.1, key="ops_flex")
+    ores = cached_day(DEMO_DAY, ocloud / 100.0, False, oflex) if (ocloud or oflex != 0.7) else res0
+
+    fl = window_flows(twin, ores, ot)
+    fc = cached_forecast(DEMO_DAY, ocloud / 100.0)
+    ots = ores.df_day.index[ot]
+    n_active = int((ores.home_accepted_kw[ot] > 0.05).sum())
+    p_now = float(fc["p_breach_1h"].iloc[ot])
+    chain_ok = ores.ledger.verify_chain()
+
+    st.markdown(
+        f"""<div class="ops-head">
+        <span><b>GRIDMIND</b> · node <b>TX-A-0421</b> · feeder HN-TAYHO-22</span>
+        <span>cycle <b>{ot + 1:02d}/96</b> · <b>{ots:%H:%M}</b></span>
+        <span>mode <b class="ok">AUTONOMOUS</b> · override ARMED</span>
+        <span>ledger <b class="{'ok' if chain_ok else 'warn'}">{'CHAIN VERIFIED' if chain_ok else 'CHAIN FAULT'}</b>
+        · height {len(ores.ledger.blocks)}</span>
+        <span>models <b>congestion F1 {m['congestion_f1']:.2f}</b> · <b>surplus MAE {m['surplus_mae_kw']:.1f} kW</b></span>
+        </div>""",
+        unsafe_allow_html=True,
+    )
+    risk_cls = "teal" if p_now < 0.25 else ("amber" if p_now < 0.6 else "red")
+    st.markdown(
+        f"""<div class="ops-kpis">
+        <div class="ops-kpi"><div class="k">ROUTED NOW</div><div class="v amber">{fl['total_exported']:.0f} kW</div></div>
+        <div class="ops-kpi"><div class="k">HEADROOM USED</div><div class="v cyan">{fl['utilisation']*100:.0f}%</div></div>
+        <div class="ops-kpi"><div class="k">OVERLOAD RISK ≤1H</div><div class="v {risk_cls}">{p_now*100:.0f}%</div></div>
+        <div class="ops-kpi"><div class="k">ACTIVE SELLERS</div><div class="v">{n_active}/33</div></div>
+        <div class="ops-kpi"><div class="k">→ STATIONS</div><div class="v" style="color:#3d9df5">{fl['absorbed_station']:.0f} kW</div></div>
+        <div class="ops-kpi"><div class="k">→ HOMES / GRID</div><div class="v teal">{fl['absorbed_local']:.0f} / {fl['to_upstream']:.0f} kW</div></div>
+        </div>""",
+        unsafe_allow_html=True,
+    )
+
+    n1, n2 = st.columns([1.45, 1])
+    with n1:
+        st.plotly_chart(flow_network(twin, ores, ot), width="stretch", key="ops_net")
+    with n2:
+        st.plotly_chart(forecast_panel(fc, m["surplus_mae_kw"], ot), width="stretch", key="ops_fc")
+        rows, more = order_book(twin, ores, ot)
+        if rows:
+            body = "".join(
+                f"<tr><td>{r['id']}</td><td class='r'>{r['kwp']:.1f}</td>"
+                f"<td class='r'>{r['offer']:.1f}</td><td class='r'>{r['cleared']:.1f}</td>"
+                f"<td><span class='ops-fill'><span style='width:{r['fill']*100:.0f}%'></span></span></td>"
+                f"<td class='st-{r['status']}'>{r['status']}</td></tr>"
+                for r in rows)
+            extra = f"<tr><td colspan='6' style='color:#5b6b82'>+ {more} smaller offers</td></tr>" if more else ""
+            st.markdown(
+                f"""<table class="ops-table"><thead><tr>
+                <th>SELLER</th><th class="r">kWp</th><th class="r">OFFER kW</th>
+                <th class="r">CLEARED</th><th>FILL</th><th>STATUS</th>
+                </tr></thead><tbody>{body}{extra}</tbody></table>""",
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown('<div class="ops-log"><span class="t">no offers this window — '
+                        'feeder in night mode</span></div>', unsafe_allow_html=True)
+
+    l1, l2 = st.columns([1.45, 1])
+    with l1:
+        st.caption(
+            f"Clearing rule: Σ accepted ≤ 90% × headroom ({fl['headroom']:.0f} kW this window) · "
+            f"bids capped at each roof's physical output · fairness credits raise a declined "
+            f"seller's priority next cycle."
+        )
+    with l2:
+        feed = ledger_feed(ores, ot)
+        lines = "".join(
+            f"<div class="
+            f"'{'fraud' if f['type'] == 'fraud_blocked' else 'seal' if f['type'] == 'settlement_sealed' else ''}'>"
+            f"<span class='h'>{f['hash']}</span> <span class='t'>{f['ts']}</span> "
+            f"<span class='m'>{f['msg']}</span></div>"
+            for f in feed)
+        st.markdown(f'<div class="ops-log">{lines or "<span class=t>ledger empty</span>"}</div>',
+                    unsafe_allow_html=True)
+
+# ======================================================================= #
+# TAB 1 — GRID OPERATOR
+# ======================================================================= #
+with tabs[1]:
     banner(GREEN, "⚡", "EVN distribution operator",
            "when and how little to curtail, window by window — instead of cutting the whole feeder.")
 
@@ -208,7 +346,7 @@ with tabs[0]:
 # ======================================================================= #
 # TAB 2 — HOUSEHOLDS
 # ======================================================================= #
-with tabs[1]:
+with tabs[2]:
     banner(AMBER, "🏠", "Households with rooftop solar",
            "none needed: switch on Auto-Sell once and earn passively — with a fair queue and a "
            "verifiable payment trail.")
@@ -265,7 +403,7 @@ with tabs[1]:
 # ======================================================================= #
 # TAB 3 — SWAP STATIONS & FLEETS
 # ======================================================================= #
-with tabs[2]:
+with tabs[3]:
     banner(BLUE, "🔋", "Battery-swap stations & e-taxi depots — the flexible demand",
            "when to charge: follow the solar-window schedule, cut your power bill, and sell "
            "'charged on sunshine' to riders.")
@@ -307,7 +445,7 @@ with tabs[2]:
 # ======================================================================= #
 # TAB 4 — DATA CENTRES (Tier 2)
 # ======================================================================= #
-with tabs[3]:
+with tabs[4]:
     banner(GREEN, "🏢", "Data centres & large buyers — mandated ≥50% green by 2030",
            "your DPPA: how much firm, hour-matched clean power to contract, and at what price.")
 
@@ -346,9 +484,9 @@ with tabs[3]:
     )
 
 # ======================================================================= #
-# TAB 5 — CITY & JUDGES
+# TAB 5 — CITY IMPACT
 # ======================================================================= #
-with tabs[4]:
+with tabs[5]:
     banner(RED, "🌏", "Hanoi & policymakers",
            "how much curtailed solar the city recovers — adjust the assumptions to your own figures.")
 
